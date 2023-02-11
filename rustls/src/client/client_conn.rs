@@ -463,8 +463,26 @@ impl ClientConnection {
     /// Make a new ClientConnection.  `config` controls how
     /// we behave in the TLS protocol, `name` is the
     /// name of the server we want to talk to.
-    pub fn new(config: Arc<ClientConfig>, name: ServerName) -> Result<Self, Error> {
+    pub fn new(
+        config: Arc<ClientConfig>,
+        name: ServerName,
+    ) -> Result<Self, Error> {
         Self::new_inner(config, name, Vec::new(), Protocol::Tcp)
+    }
+
+    /// Create a new ClientConnection with a generator.
+    pub fn new_with_session_id_generator(
+        config: Arc<ClientConfig>,
+        name: ServerName,
+        session_id_generator: impl Fn(&[u8]) -> [u8; 32],
+    ) -> Result<Self, Error> {
+        Self::new_inner_with_session_id_generator(
+            config,
+            name,
+            Vec::new(),
+            Protocol::Tcp,
+            (true, session_id_generator),
+        )
     }
 
     fn new_inner(
@@ -472,6 +490,16 @@ impl ClientConnection {
         name: ServerName,
         extra_exts: Vec<ClientExtension>,
         proto: Protocol,
+    ) -> Result<Self, Error> {
+        Self::new_inner_with_session_id_generator(config, name, extra_exts, proto, (false, |_| [0; 32]))
+    }
+
+    fn new_inner_with_session_id_generator(
+        config: Arc<ClientConfig>,
+        name: ServerName,
+        extra_exts: Vec<ClientExtension>,
+        proto: Protocol,
+        session_id_generator: (bool, impl Fn(&[u8]) -> [u8; 32]),
     ) -> Result<Self, Error> {
         let mut common_state = CommonState::new(Side::Client);
         common_state.set_max_fragment_size(config.max_fragment_size)?;
@@ -487,7 +515,7 @@ impl ClientConnection {
             data: &mut data,
         };
 
-        let state = hs::start_handshake(name, extra_exts, config, &mut cx)?;
+        let state = hs::start_handshake(name, extra_exts, config, &mut cx, session_id_generator)?;
         let inner = ConnectionCommon::new(state, data, common_state);
 
         Ok(Self { inner })
@@ -659,6 +687,7 @@ pub trait ClientQuicExt {
             quic::Version::V1 => ClientExtension::TransportParameters(params),
         };
 
+        // hack: only a work around, do not use it.
         ClientConnection::new_inner(config, name, vec![ext], Protocol::Quic)
     }
 }

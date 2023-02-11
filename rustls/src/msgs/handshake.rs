@@ -104,8 +104,10 @@ impl From<[u8; 32]> for Random {
 
 #[derive(Copy, Clone)]
 pub struct SessionID {
-    len: usize,
-    data: [u8; 32],
+    // hack: we need to access it
+    pub(crate) len: usize,
+    // hack: we need to access it
+    pub(crate) data: [u8; 32],
 }
 
 impl fmt::Debug for SessionID {
@@ -155,6 +157,13 @@ impl SessionID {
         let mut data = [0u8; 32];
         rand::fill_random(&mut data)?;
         Ok(Self { data, len: 32 })
+    }
+
+    pub fn zero() -> Self {
+        Self {
+            data: [0u8; 32],
+            len: 32,
+        }
     }
 
     pub fn empty() -> Self {

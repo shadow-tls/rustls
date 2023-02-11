@@ -85,6 +85,7 @@ pub(super) fn start_handshake(
     extra_exts: Vec<ClientExtension>,
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
+    session_id_generator: (bool, impl Fn(&[u8]) -> [u8; 32]),
 ) -> NextStateOrError {
     let mut transcript_buffer = HandshakeHashBuffer::new();
     if config
@@ -147,6 +148,8 @@ pub(super) fn start_handshake(
         sent_tls13_fake_ccs,
         hello_details,
         session_id,
+        session_id_generator.0,
+        session_id_generator.1,
         None,
         server_name,
         key_share,
@@ -186,6 +189,8 @@ fn emit_client_hello_for_retry(
     mut sent_tls13_fake_ccs: bool,
     mut hello: ClientHelloDetails,
     session_id: Option<SessionID>,
+    use_session_id_generator: bool,
+    session_id_generator: impl Fn(&[u8]) -> [u8; 32],
     retryreq: Option<&HelloRetryRequest>,
     server_name: ServerName,
     key_share: Option<kx::KeyExchange>,
@@ -328,7 +333,7 @@ fn emit_client_hello_for_retry(
         .map(ClientExtension::get_type)
         .collect();
 
-    let session_id = session_id.unwrap_or_else(SessionID::empty);
+    let mut session_id = session_id.unwrap_or_else(SessionID::empty);
     let mut cipher_suites: Vec<_> = config
         .cipher_suites
         .iter()
@@ -348,6 +353,28 @@ fn emit_client_hello_for_retry(
             extensions: exts,
         }),
     };
+
+    // hack: sign chp and overwrite session id
+    if use_session_id_generator {
+        let mut buffer = Vec::new();
+        match &mut chp.payload {
+            HandshakePayload::ClientHello(c) => {
+                c.session_id = SessionID::zero();
+            }
+            _ => unreachable!(),
+        }
+        chp.encode(&mut buffer);
+        session_id = SessionID {
+            len: 32,
+            data: session_id_generator(&buffer),
+        };
+        match &mut chp.payload {
+            HandshakePayload::ClientHello(c) => {
+                c.session_id = session_id;
+            }
+            _ => unreachable!(),
+        }
+    }
 
     let early_key_schedule = if let Some(resuming) = fill_in_binder {
         let schedule = tls13::fill_in_psk_binder(&resuming, &transcript_buffer, &mut chp);
@@ -768,6 +795,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             _ => offered_key_share,
         };
 
+        let session_id = self.next.session_id.data;
         Ok(emit_client_hello_for_retry(
             self.next.config,
             cx,
@@ -778,6 +806,8 @@ impl ExpectServerHelloOrHelloRetryRequest {
             self.next.sent_tls13_fake_ccs,
             self.next.hello,
             Some(self.next.session_id),
+            false,
+            move |_| session_id,
             Some(hrr),
             self.next.server_name,
             Some(key_share),
