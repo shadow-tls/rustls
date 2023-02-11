@@ -1,13 +1,13 @@
 [package]
-name = "rustls"
+name = "rustls-fork-shadow-tls"
 version = "0.20.8"
 edition = "2018"
 rust-version = "1.57"
 license = "Apache-2.0/ISC/MIT"
 readme = "../README.md"
 description = "Rustls is a modern TLS library written in Rust."
-homepage = "https://github.com/rustls/rustls"
-repository = "https://github.com/rustls/rustls"
+homepage = "https://github.com/shadow-tls/rustls"
+repository = "https://github.com/shadow-tls/rustls"
 categories = ["network-programming", "cryptography"]
 autobenches = false
 build = "build.rs"
