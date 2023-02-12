@@ -51,6 +51,8 @@ mod server_hello {
         pub(in crate::client) randoms: ConnectionRandoms,
         pub(in crate::client) using_ems: bool,
         pub(in crate::client) transcript: HandshakeHash,
+        pub(in crate::client) pre_generated_keys:
+            Option<(kx::KeyExchange, kx::KeyExchange, kx::KeyExchange)>,
     }
 
     impl CompleteServerHelloHandling {
@@ -188,6 +190,7 @@ mod server_hello {
                 may_send_cert_status,
                 must_issue_new_ticket,
                 server_cert_sct_list,
+                pre_generated_keys: self.pre_generated_keys,
             }))
         }
     }
@@ -205,6 +208,7 @@ struct ExpectCertificate {
     may_send_cert_status: bool,
     must_issue_new_ticket: bool,
     server_cert_sct_list: Option<SCTList>,
+    pre_generated_keys: Option<(kx::KeyExchange, kx::KeyExchange, kx::KeyExchange)>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificate {
@@ -233,6 +237,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
                 server_cert_sct_list: self.server_cert_sct_list,
                 server_cert_chain,
                 must_issue_new_ticket: self.must_issue_new_ticket,
+                pre_generated_keys: self.pre_generated_keys,
             }))
         } else {
             let server_cert =
@@ -249,6 +254,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
                 suite: self.suite,
                 server_cert,
                 must_issue_new_ticket: self.must_issue_new_ticket,
+                pre_generated_keys: self.pre_generated_keys,
             }))
         }
     }
@@ -266,6 +272,7 @@ struct ExpectCertificateStatusOrServerKx {
     server_cert_sct_list: Option<SCTList>,
     server_cert_chain: CertificatePayload,
     must_issue_new_ticket: bool,
+    pre_generated_keys: Option<(kx::KeyExchange, kx::KeyExchange, kx::KeyExchange)>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
@@ -293,6 +300,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
                     self.server_cert_sct_list,
                 ),
                 must_issue_new_ticket: self.must_issue_new_ticket,
+                pre_generated_keys: self.pre_generated_keys,
             })
             .handle(cx, m),
             MessagePayload::Handshake {
@@ -314,6 +322,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
                 server_cert_sct_list: self.server_cert_sct_list,
                 server_cert_chain: self.server_cert_chain,
                 must_issue_new_ticket: self.must_issue_new_ticket,
+                pre_generated_keys: self.pre_generated_keys,
             })
             .handle(cx, m),
             payload => Err(inappropriate_handshake_message(
@@ -340,6 +349,7 @@ struct ExpectCertificateStatus {
     server_cert_sct_list: Option<SCTList>,
     server_cert_chain: CertificatePayload,
     must_issue_new_ticket: bool,
+    pre_generated_keys: Option<(kx::KeyExchange, kx::KeyExchange, kx::KeyExchange)>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateStatus {
@@ -378,6 +388,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatus {
             suite: self.suite,
             server_cert,
             must_issue_new_ticket: self.must_issue_new_ticket,
+            pre_generated_keys: self.pre_generated_keys,
         }))
     }
 }
@@ -393,6 +404,7 @@ struct ExpectServerKx {
     suite: &'static Tls12CipherSuite,
     server_cert: ServerCertDetails,
     must_issue_new_ticket: bool,
+    pre_generated_keys: Option<(kx::KeyExchange, kx::KeyExchange, kx::KeyExchange)>,
 }
 
 impl State<ClientConnectionData> for ExpectServerKx {
@@ -434,6 +446,7 @@ impl State<ClientConnectionData> for ExpectServerKx {
             server_cert: self.server_cert,
             server_kx,
             must_issue_new_ticket: self.must_issue_new_ticket,
+            pre_generated_keys: self.pre_generated_keys,
         }))
     }
 }
@@ -558,6 +571,7 @@ struct ExpectServerDoneOrCertReq {
     server_cert: ServerCertDetails,
     server_kx: ServerKxDetails,
     must_issue_new_ticket: bool,
+    pre_generated_keys: Option<(kx::KeyExchange, kx::KeyExchange, kx::KeyExchange)>,
 }
 
 impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
@@ -584,6 +598,7 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
                 server_cert: self.server_cert,
                 server_kx: self.server_kx,
                 must_issue_new_ticket: self.must_issue_new_ticket,
+                pre_generated_keys: self.pre_generated_keys,
             })
             .handle(cx, m)
         } else {
@@ -602,6 +617,7 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
                 server_kx: self.server_kx,
                 client_auth: None,
                 must_issue_new_ticket: self.must_issue_new_ticket,
+                pre_generated_keys: self.pre_generated_keys,
             })
             .handle(cx, m)
         }
@@ -620,6 +636,7 @@ struct ExpectCertificateRequest {
     server_cert: ServerCertDetails,
     server_kx: ServerKxDetails,
     must_issue_new_ticket: bool,
+    pre_generated_keys: Option<(kx::KeyExchange, kx::KeyExchange, kx::KeyExchange)>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateRequest {
@@ -665,6 +682,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             server_kx: self.server_kx,
             client_auth: Some(client_auth),
             must_issue_new_ticket: self.must_issue_new_ticket,
+            pre_generated_keys: self.pre_generated_keys,
         }))
     }
 }
@@ -682,6 +700,7 @@ struct ExpectServerDone {
     server_kx: ServerKxDetails,
     client_auth: Option<ClientAuthDetails>,
     must_issue_new_ticket: bool,
+    pre_generated_keys: Option<(kx::KeyExchange, kx::KeyExchange, kx::KeyExchange)>,
 }
 
 impl State<ClientConnectionData> for ExpectServerDone {
@@ -791,7 +810,20 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 .ok_or_else(|| {
                     Error::PeerMisbehavedError("peer chose an unsupported group".to_string())
                 })?;
-        let kx = kx::KeyExchange::start(group).ok_or(Error::FailedToGetRandomBytes)?;
+        // hack: use pre-generated if exist
+        let kx = if let Some(pre_generated_keys) = st.pre_generated_keys {
+            // pre_generated_keys
+            match group.name {
+                crate::NamedGroup::X25519 => pre_generated_keys.0,
+                crate::NamedGroup::secp256r1 => pre_generated_keys.1,
+                crate::NamedGroup::secp384r1 => pre_generated_keys.2,
+
+                // Infact it should be unreachable.
+                _ => kx::KeyExchange::start(group).ok_or(Error::FailedToGetRandomBytes)?,
+            }
+        } else {
+            kx::KeyExchange::start(group).ok_or(Error::FailedToGetRandomBytes)?
+        };
 
         // 5b.
         let mut transcript = st.transcript;

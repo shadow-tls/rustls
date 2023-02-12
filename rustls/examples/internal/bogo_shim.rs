@@ -4,9 +4,7 @@
 // https://boringssl.googlesource.com/boringssl/+/master/ssl/test
 //
 
-use base64;
-use env_logger;
-use rustls;
+use rustls_fork_shadow_tls as rustls;
 
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::persist;
@@ -423,7 +421,7 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
         .unwrap()
         .with_client_cert_verifier(client_auth)
         .with_single_cert_with_ocsp_and_sct(
-            cert.clone(),
+            cert,
             key,
             opts.server_ocsp_response.clone(),
             opts.server_sct_list.clone(),
@@ -487,7 +485,7 @@ impl rustls::client::StoresClientSessions for ClientCacheWithoutKxHints {
         let mut reader = Reader::init(&value[2..]);
         let csv = CipherSuite::read_bytes(&value[..2])
             .and_then(|suite| {
-                persist::ClientSessionValue::read(&mut reader, suite, &rustls::ALL_CIPHER_SUITES)
+                persist::ClientSessionValue::read(&mut reader, suite, rustls::ALL_CIPHER_SUITES)
             })
             .unwrap();
 
@@ -747,7 +745,8 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
             let mut one_byte = [0u8];
             let mut cursor = io::Cursor::new(&mut one_byte[..]);
             sess.write_tls(&mut cursor).unwrap();
-            conn.write(&one_byte).expect("IO error");
+            conn.write_all(&one_byte)
+                .expect("IO error");
 
             quench_writes = true;
         }

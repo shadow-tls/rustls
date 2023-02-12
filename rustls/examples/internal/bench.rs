@@ -12,6 +12,8 @@ use std::ops::DerefMut;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use rustls_fork_shadow_tls as rustls;
+
 use rustls::client::{ClientSessionMemoryCache, NoClientSessionStorage};
 use rustls::server::{
     AllowAnyAuthenticatedClient, NoClientAuth, NoServerSessionStorage, ServerSessionMemoryCache,

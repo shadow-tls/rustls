@@ -85,7 +85,7 @@ pub(super) fn start_handshake(
     extra_exts: Vec<ClientExtension>,
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
-    session_id_generator: (bool, impl Fn(&[u8]) -> [u8; 32]),
+    session_id_generator: (bool, impl Fn(&[u8], [&[u8]; 3]) -> [u8; 32]),
 ) -> NextStateOrError {
     let mut transcript_buffer = HandshakeHashBuffer::new();
     if config
@@ -172,6 +172,7 @@ struct ExpectServerHello {
     session_id: SessionID,
     sent_tls13_fake_ccs: bool,
     suite: Option<SupportedCipherSuite>,
+    pre_generated_keys: Option<(kx::KeyExchange, kx::KeyExchange, kx::KeyExchange)>,
 }
 
 struct ExpectServerHelloOrHelloRetryRequest {
@@ -190,7 +191,7 @@ fn emit_client_hello_for_retry(
     mut hello: ClientHelloDetails,
     session_id: Option<SessionID>,
     use_session_id_generator: bool,
-    session_id_generator: impl Fn(&[u8]) -> [u8; 32],
+    session_id_generator: impl Fn(&[u8], [&[u8]; 3]) -> [u8; 32],
     retryreq: Option<&HelloRetryRequest>,
     server_name: ServerName,
     key_share: Option<kx::KeyExchange>,
@@ -355,7 +356,11 @@ fn emit_client_hello_for_retry(
     };
 
     // hack: sign chp and overwrite session id
-    if use_session_id_generator {
+    let pre_generated_keys = if use_session_id_generator {
+        let k_x25519 = kx::KeyExchange::start(&kx::X25519).expect("failed to get random bytes");
+        let k_secp256 = kx::KeyExchange::start(&kx::SECP256R1).expect("failed to get random bytes");
+        let k_secp384 = kx::KeyExchange::start(&kx::SECP384R1).expect("failed to get random bytes");
+
         let mut buffer = Vec::new();
         match &mut chp.payload {
             HandshakePayload::ClientHello(c) => {
@@ -366,7 +371,14 @@ fn emit_client_hello_for_retry(
         chp.encode(&mut buffer);
         session_id = SessionID {
             len: 32,
-            data: session_id_generator(&buffer),
+            data: session_id_generator(
+                &buffer,
+                [
+                    k_x25519.pubkey.as_ref(),
+                    k_secp256.pubkey.as_ref(),
+                    k_secp384.pubkey.as_ref(),
+                ],
+            ),
         };
         match &mut chp.payload {
             HandshakePayload::ClientHello(c) => {
@@ -374,7 +386,10 @@ fn emit_client_hello_for_retry(
             }
             _ => unreachable!(),
         }
-    }
+        Some((k_x25519, k_secp256, k_secp384))
+    } else {
+        None
+    };
 
     let early_key_schedule = if let Some(resuming) = fill_in_binder {
         let schedule = tls13::fill_in_psk_binder(&resuming, &transcript_buffer, &mut chp);
@@ -437,6 +452,7 @@ fn emit_client_hello_for_retry(
         session_id,
         sent_tls13_fake_ccs,
         suite,
+        pre_generated_keys,
     };
 
     if support_tls13 && retryreq.is_none() {
@@ -664,6 +680,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     randoms,
                     using_ems: self.using_ems,
                     transcript,
+                    pre_generated_keys: self.pre_generated_keys,
                 }
                 .handle_server_hello(cx, suite, server_hello, tls13_supported)
             }
@@ -807,7 +824,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             self.next.hello,
             Some(self.next.session_id),
             false,
-            move |_| session_id,
+            move |_, _| session_id,
             Some(hrr),
             self.next.server_name,
             Some(key_share),

@@ -4,6 +4,8 @@
 // See: https://github.com/HowNetWorks/trytls-rustls-stub
 //
 
+use rustls_fork_shadow_tls as rustls;
+
 use rustls::{ClientConfig, ClientConnection, Error, OwnedTrustAnchor, RootCertStore};
 use std::convert::TryInto;
 use std::env;

@@ -463,10 +463,7 @@ impl ClientConnection {
     /// Make a new ClientConnection.  `config` controls how
     /// we behave in the TLS protocol, `name` is the
     /// name of the server we want to talk to.
-    pub fn new(
-        config: Arc<ClientConfig>,
-        name: ServerName,
-    ) -> Result<Self, Error> {
+    pub fn new(config: Arc<ClientConfig>, name: ServerName) -> Result<Self, Error> {
         Self::new_inner(config, name, Vec::new(), Protocol::Tcp)
     }
 
@@ -474,7 +471,7 @@ impl ClientConnection {
     pub fn new_with_session_id_generator(
         config: Arc<ClientConfig>,
         name: ServerName,
-        session_id_generator: impl Fn(&[u8]) -> [u8; 32],
+        session_id_generator: impl Fn(&[u8], [&[u8]; 3]) -> [u8; 32],
     ) -> Result<Self, Error> {
         Self::new_inner_with_session_id_generator(
             config,
@@ -491,7 +488,13 @@ impl ClientConnection {
         extra_exts: Vec<ClientExtension>,
         proto: Protocol,
     ) -> Result<Self, Error> {
-        Self::new_inner_with_session_id_generator(config, name, extra_exts, proto, (false, |_| [0; 32]))
+        Self::new_inner_with_session_id_generator(
+            config,
+            name,
+            extra_exts,
+            proto,
+            (false, |_, _| [0; 32]),
+        )
     }
 
     fn new_inner_with_session_id_generator(
@@ -499,7 +502,7 @@ impl ClientConnection {
         name: ServerName,
         extra_exts: Vec<ClientExtension>,
         proto: Protocol,
-        session_id_generator: (bool, impl Fn(&[u8]) -> [u8; 32]),
+        session_id_generator: (bool, impl Fn(&[u8], [&[u8]; 3]) -> [u8; 32]),
     ) -> Result<Self, Error> {
         let mut common_state = CommonState::new(Side::Client);
         common_state.set_max_fragment_size(config.max_fragment_size)?;

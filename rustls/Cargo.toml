@@ -1,6 +1,6 @@
 [package]
 name = "rustls-fork-shadow-tls"
-version = "0.20.8"
+version = "0.20.9-mod.1"
 edition = "2018"
 rust-version = "1.57"
 license = "Apache-2.0/ISC/MIT"
@@ -51,11 +51,6 @@ path = "examples/internal/trytls_shim.rs"
 [[example]]
 name = "bench"
 path = "examples/internal/bench.rs"
-
-[[bench]]
-name = "benchmarks"
-path = "benches/benchmarks.rs"
-harness = false
 
 [package.metadata.docs.rs]
 all-features = true
