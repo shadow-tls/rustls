@@ -354,6 +354,13 @@ fn emit_client_hello_for_retry(
         }),
     };
 
+    let early_key_schedule = if let Some(resuming) = fill_in_binder {
+        let schedule = tls13::fill_in_psk_binder(&resuming, &transcript_buffer, &mut chp);
+        Some((resuming.suite(), schedule))
+    } else {
+        None
+    };
+
     // hack: sign chp and overwrite session id
     if use_session_id_generator {
         let mut buffer = Vec::new();
@@ -375,13 +382,6 @@ fn emit_client_hello_for_retry(
             _ => unreachable!(),
         }
     }
-
-    let early_key_schedule = if let Some(resuming) = fill_in_binder {
-        let schedule = tls13::fill_in_psk_binder(&resuming, &transcript_buffer, &mut chp);
-        Some((resuming.suite(), schedule))
-    } else {
-        None
-    };
 
     let ch = Message {
         // "This value MUST be set to 0x0303 for all records generated
